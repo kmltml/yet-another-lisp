@@ -1,0 +1,6 @@
+[package]
+name = "yet-another-lisp"
+version = "0.1.0"
+authors = ["Kamil Tomala <kamil.tomala@gmail.com>"]
+
+[dependencies]
