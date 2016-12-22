@@ -1,6 +1,8 @@
-pub enum Val<'a> {
-    List{ car: &'a Val<'a>, cdr: &'a Val<'a> },
-    Sym(&'a str),
+#[derive(PartialEq, Debug)]
+pub enum Val {
+    List(Vec<Val>),
+    Sym(String),
     Num(f64),
     Str(String)
 }
+
