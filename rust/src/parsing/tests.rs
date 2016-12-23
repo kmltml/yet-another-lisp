@@ -5,15 +5,27 @@ use data::*;
 fn parse_single_symbol() {
     assert_eq!(
         parse(String::from("foo")),
-        Val::Sym(String::from("foo"))
+        Par::Sym(String::from("foo"))
     );
     assert_eq!(
         parse(String::from("bar")),
-        Val::Sym(String::from("bar"))
+        Par::Sym(String::from("bar"))
     );
     assert_eq!(
         parse(String::from("+")),
-        Val::Sym(String::from("+"))
+        Par::Sym(String::from("+"))
+    );
+}
+
+#[test]
+fn parse_a_quoted_symbol() {
+    assert_eq!(
+        parse(String::from("'foo")),
+        Par::Quot(String::from("foo"))
+    );
+    assert_eq!(
+        parse(String::from("'+")),
+        Par::Quot(String::from("+"))
     );
 }
 
@@ -21,7 +33,7 @@ fn parse_single_symbol() {
 fn parse_string_literal() {
     assert_eq!(
         parse(String::from("\"Hello, World!\"")),
-        Val::Str(String::from("Hello, World!"))
+        Par::Str(String::from("Hello, World!"))
     );
 }
 
@@ -29,7 +41,7 @@ fn parse_string_literal() {
 fn parse_empty_list() {
     assert_eq!(
         parse(String::from("()")),
-        Val::List(vec![])
+        Par::List(vec![])
     );
 }
 
@@ -37,11 +49,11 @@ fn parse_empty_list() {
 fn parse_simple_list() {
     assert_eq!(
         parse(String::from("(+ a b)")),
-        Val::List(vec![Val::Sym(String::from("+")), Val::Sym(String::from("a")), Val::Sym(String::from("b"))])
+        Par::List(vec![Par::Sym(String::from("+")), Par::Sym(String::from("a")), Par::Sym(String::from("b"))])
     );
     assert_eq!(
         parse(String::from("(+ 1.5 2)")),
-        Val::List(vec![Val::Sym(String::from("+")), Val::Num(1.5), Val::Num(2.0)])
+        Par::List(vec![Par::Sym(String::from("+")), Par::Num(1.5), Par::Num(2.0)])
     );
 }
 
@@ -49,12 +61,24 @@ fn parse_simple_list() {
 fn parse_nested_list() {
     assert_eq!(
         parse(String::from("((a b) c)")),
-        Val::List(vec![
-            Val::List(vec![
-                Val::Sym(String::from("a")),
-                Val::Sym(String::from("b"))
+        Par::List(vec![
+            Par::List(vec![
+                Par::Sym(String::from("a")),
+                Par::Sym(String::from("b"))
             ]),
-            Val::Sym(String::from("c"))
+            Par::Sym(String::from("c"))
+        ])
+    );
+}
+
+#[test]
+fn parse_simple_vector() {
+    assert_eq!(
+        parse(String::from("[+ a 1]")),
+        Par::Vec(vec![
+            Par::Sym(String::from("+")),
+            Par::Sym(String::from("a")),
+            Par::Num(1.0)
         ])
     );
 }
@@ -63,7 +87,7 @@ fn parse_nested_list() {
 fn parse_integer() {
     assert_eq!(
         parse(String::from("42")),
-        Val::Num(42.0)
+        Par::Num(42.0)
     );
 }
 
@@ -71,6 +95,6 @@ fn parse_integer() {
 fn parse_float() {
     assert_eq!(
         parse(String::from("0.5")),
-        Val::Num(0.5)
+        Par::Num(0.5)
     );
 }
