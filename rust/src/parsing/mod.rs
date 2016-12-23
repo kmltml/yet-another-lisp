@@ -4,6 +4,10 @@ use regex::Regex;
 
 mod tests;
 
+struct ParseStream<'a> {
+    remaining: &'a str;
+}
+
 pub struct ParseResult {
     val: Par,
     rest: String
@@ -15,7 +19,7 @@ pub fn parse(source: String) -> Par {
 
 pub fn parse_expression(source: String) -> Option<ParseResult> {
     let source = skip_whitespace(source);
-    source.chars().next().map( |lookahead| 
+    source.chars().next().map( |lookahead|
         match lookahead {
             c if c.is_numeric() => parse_number(source),
             c if is_symbol_char(&c) => parse_symbol(source),
