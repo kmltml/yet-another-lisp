@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Lisp demo</title>
+        <script src="js/target/scala-2.11/yet-another-lisp-fastopt.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.2.6/ace.js"></script>
+        <style>
+            #source {
+                position: absolute;
+                top: 0;
+                left: 0;
+                bottom: 0;
+                right: 50%;
+            }
+            #compiler-output {
+                position: absolute;
+                top: 0;
+                left: 50%;
+                bottom: 0;
+                right: 0;
+            }
+            #compile {
+                position: absolute;
+                top: 10px;
+                right: 51%;
+                z-index: 10;
+            }
+            #eval {
+                position: absolute;
+                top: 10px;
+                right: 1%;
+                z-index: 10;
+            }
+        </style>
+        <script>
+            var editor;
+            var compilerOutput = "";
+            document.addEventListener("DOMContentLoaded", () => {
+                editor = ace.edit("source")
+                editor.setTheme("ace/theme/idle_fingers")
+                editor.getSession().setMode("ace/mode/lisp")
+                document.getElementById("compile").addEventListener("click", () => {
+                    compilerOutput = CompilerInterface().compile(editor.getValue())
+                    document.getElementById("compiler-output").textContent = compilerOutput
+                })
+                document.getElementById("eval").addEventListener("click", () => {
+                    eval(compilerOutput)
+                })
+            })
+        </script>
+    </head>
+    <body>
+        <div id="source"></div>
+        <button id="compile">Compile</button>
+        <div id="compiler-output"></div>
+        <button id="eval">Eval</button>
+    </body>
+</html>
