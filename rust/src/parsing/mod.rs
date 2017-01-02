@@ -5,7 +5,44 @@ use regex::Regex;
 mod tests;
 
 struct ParseStream<'a> {
-    remaining: &'a str;
+    remaining: &'a str
+}
+
+impl<'a> ParseStream<'a> {
+
+    fn take_while<F>(&mut self, f: F) -> &'a str
+        where F: Fn(&char) -> bool {
+
+        let prefix_length = self.count_bytes_while(f);
+        let prefix = &self.remaining[..prefix_length];
+        self.remaining = &self.remaining[prefix_length..];
+
+        prefix
+    }
+
+    fn skip_while<F>(&mut self, f: F)
+        where F: Fn(&char) -> bool {
+
+        let _ = self.take_while(f);
+    }
+
+    fn skip_whitespace(&mut self) {
+        self.skip_while(|c| c.is_whitespace());
+    }
+
+    fn count_bytes_while<F>(&self, f: F) -> usize
+        where F: Fn(&char) -> bool {
+
+        self.remaining.chars()
+            .take_while(f)
+            .map(|c| c.len_utf8())
+            .sum()
+    }
+
+    fn next_char(&mut self) -> Option<char> {
+        self.skip_whitespace();
+        self.remaining.chars().next()
+    }
 }
 
 pub struct ParseResult {
