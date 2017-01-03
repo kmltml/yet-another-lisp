@@ -1,6 +1,6 @@
 import eval.Val
 import fastparse.core.Parsed.Success
-import js.{Compiler, Printer, Simple}
+import js.{Ast, Compiler, Printer, Simple}
 import parsing.Parser
 
 import scala.scalajs.js.annotation.{JSExport, JSExportAll}
@@ -10,10 +10,10 @@ import scala.scalajs.js.annotation.{JSExport, JSExportAll}
 object CompilerInterface {
 
   def compile(source: String): String = {
-    val Success(Seq(sval), _) = Parser.program.parse(source)
-    val prog = Val.desugar(sval)
-    val Simple(ast) = Compiler.compileExpr(prog)
-    Printer.print(ast)
+    val Success(svals, _) = Parser.program.parse(source)
+    val prog = svals.map(Val.desugar)
+    val asts = prog.flatMap(Compiler.compileStatement)
+    Printer.print(Ast.Block(asts))
   }
 
 }

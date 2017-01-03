@@ -38,14 +38,18 @@
             var compilerOutput = "";
             document.addEventListener("DOMContentLoaded", () => {
                 editor = ace.edit("source")
+                editor.setValue(localStorage.getItem("source") || "")
                 editor.setTheme("ace/theme/idle_fingers")
                 editor.getSession().setMode("ace/mode/lisp")
+                editor.on("change", () => {
+                    localStorage.setItem("source", editor.getValue())
+                })
                 document.getElementById("compile").addEventListener("click", () => {
                     compilerOutput = CompilerInterface().compile(editor.getValue())
                     document.getElementById("compiler-output").textContent = compilerOutput
                 })
                 document.getElementById("eval").addEventListener("click", () => {
-                    eval(compilerOutput)
+                    console.log(eval(compilerOutput))
                 })
             })
         </script>

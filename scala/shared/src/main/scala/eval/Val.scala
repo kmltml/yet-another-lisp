@@ -35,8 +35,8 @@ object Val {
     case SVal.Sym(s)     => Sym(s)
     case SVal.Num(n)     => Num(n)
     case SVal.Str(s)     => Str(s)
-    case SVal.Quot(s)    => Sexp(List(S.Symbol, Sym(s)))
-    case SVal.Vec(vals)  => Sexp(S.Sexp :: (vals map desugar))
+    case SVal.Quot(s)    => Sexp(List(S.symbol, Sym(s)))
+    case SVal.Vec(vals)  => Sexp(S.sexp :: (vals map desugar))
   }
 
 }
