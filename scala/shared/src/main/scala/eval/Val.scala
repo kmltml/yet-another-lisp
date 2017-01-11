@@ -12,6 +12,8 @@ object Val {
 
     override def equals(obj: Any): Boolean = this eq obj.asInstanceOf[AnyRef]
 
+    override def toString: String = s"'$name"
+
   }
   object Sym {
 
@@ -28,6 +30,11 @@ object Val {
   case class Str(value: String) extends Val
   case class Sexp(value: List[Val]) extends Val
 
+  sealed trait Fun extends Val
+  case class Builtin(run: List[Val] => Val) extends Fun
+  case class Lambda(args: List[Val.Sym], body: Val, ctxt: Context) extends Fun
+
+  case class Data(constructor: Val.Sym, members: Seq[Val]) extends Val
 
 
   def desugar(sval: SVal): Val = sval match {

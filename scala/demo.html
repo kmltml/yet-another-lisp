@@ -32,6 +32,13 @@
                 right: 1%;
                 z-index: 10;
             }
+
+            #interprete {
+                position: absolute;
+                top: 50px;
+                right: 1%;
+                z-index: 10;
+            }
         </style>
         <script>
             var editor;
@@ -51,6 +58,9 @@
                 document.getElementById("eval").addEventListener("click", () => {
                     console.log(eval(compilerOutput))
                 })
+                document.getElementById("interprete").addEventListener("click", () => {
+                    document.getElementById("compiler-output").textContent = CompilerInterface().eval(editor.getValue())
+                })
             })
         </script>
     </head>
@@ -59,5 +69,6 @@
         <button id="compile">Compile</button>
         <div id="compiler-output"></div>
         <button id="eval">Eval</button>
+        <button id="interprete">Interprete</button>
     </body>
 </html>

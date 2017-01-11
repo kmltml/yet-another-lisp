@@ -55,7 +55,7 @@ class Parser {
 
 
   def isSymbolStartChar(c: Char): Boolean =
-    c.isLetter || "+=_-*&^%$#@!~|\\/?><.".contains(c)
+    c.isLetter || "+=_-*&^%$#@!~|\\/?><.:".contains(c)
 
   def isSymbolChar(c: Char): Boolean =
     c.isDigit || isSymbolStartChar(c)
