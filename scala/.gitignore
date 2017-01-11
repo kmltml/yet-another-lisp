@@ -6,3 +6,5 @@ project/boot/
 .cache
 .idea/
 *.iml
+!js/target/scala-2.11/yet-another-lisp-opt.js
+!js/target/scala-2.11/yet-another-lisp-opt.js.map
