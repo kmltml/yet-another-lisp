@@ -47,6 +47,7 @@
                 editor = ace.edit("source")
                 editor.setValue(localStorage.getItem("source") || "")
                 editor.setTheme("ace/theme/idle_fingers")
+                editor.setOption("tabSize", 2)
                 editor.getSession().setMode("ace/mode/lisp")
                 editor.on("change", () => {
                     localStorage.setItem("source", editor.getValue())

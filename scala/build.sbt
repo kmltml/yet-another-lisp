@@ -18,8 +18,8 @@ lazy val purelisp = crossProject.in(file(".")).
     scalaVersion := "2.11.8",
     libraryDependencies ++= Seq(
       "com.lihaoyi" %%% "fastparse" % "0.4.1",
-
-      "com.lihaoyi" %%% "utest" % "0.4.3" % "test"
+      "com.lihaoyi" %%% "utest" % "0.4.3" % "test",
+      "org.typelevel" %%% "cats" % "0.8.1"
     ),
     testFrameworks += new TestFramework("utest.runner.Framework")
   ).

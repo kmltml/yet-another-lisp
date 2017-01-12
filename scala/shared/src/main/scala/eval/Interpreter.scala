@@ -1,5 +1,8 @@
 package eval
 
+import cats._
+import cats.implicits._
+
 object Interpreter {
 
   def builtinFunctions: Map[String, List[Val] => Val] = Map(
@@ -49,8 +52,14 @@ object Interpreter {
     }.flatten
 
     val defs: Seq[(Val.Sym, Val)] = program.collect {
-      case Val.Sexp(S.`def` :: Val.Sexp((name: Val.Sym) :: args) :: body :: Nil) =>
-        name -> Val.Lambda(args.map { case s: Val.Sym => s }, body, ctxt)
+      case Val.Sexp(S.`def` :: d) =>
+        val pairs = d.grouped(2).toList
+        val Val.Sexp((name: Val.Sym) :: _) :: _ = pairs.head
+        val bodies = pairs map {
+          case Seq(Val.Sexp(`name` :: patterns), body) =>
+            patterns -> body
+        }
+        name -> Val.Def(bodies)
     }
     val lastExp = program.lastOption.filter {
       case Val.Sexp(S.`def` :: _) => false
@@ -107,6 +116,18 @@ object Interpreter {
         val bindings = argNames zip args.map(eval(_, ctxt))
         val innerContext = c ++ bindings
         eval(body, innerContext)
+      case Val.Def(bodies) =>
+        val argValues = args.map(eval(_, ctxt))
+        bodies.view.map {
+          case (patterns, body) =>
+            val results = (patterns zip argValues).traverseU {
+              case (pat, v) => patmat(ctxt, v, pat)
+            }
+            val binds = results.map(_.foldLeft(Map.empty[Val.Sym, Val])(_ ++ _))
+            binds.map(b => eval(body, ctxt ++ b))
+        }.collectFirst {
+          case Some(v) => v
+        }.get
     }
   }
 
@@ -146,6 +167,7 @@ object Interpreter {
             case (Some(a), Some(b)) => Some(a ++ b)
             case (_, None) => None
           }
+        case _ => None
       }
   }
 
