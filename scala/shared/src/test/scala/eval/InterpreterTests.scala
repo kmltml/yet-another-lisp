@@ -61,6 +61,27 @@ object InterpreterTests extends TestSuite{
           sexp(sexp('Some, 'v), 'v))
       ))._2 ==> n(2)
     }
+    "pattern matching in def" - {
+      Interpreter.evalProgram(List(
+        sexp('def,
+          sexp('factorial, n(1)), n(1),
+          sexp('factorial, 'n), sexp('*, 'n, sexp('factorial, sexp('-, 'n, n(1))))
+        ),
+        sexp('factorial, n(6))
+      ))._2 ==> n(720)
+    }
+    "list map" - {
+      Interpreter.evalProgram(List(
+        sexp('data, sexp('List, 'a),
+          sexp('::, 'a, sexp('List, 'a)),
+          sexp('Nil)),
+        sexp('def,
+          sexp('map, '_, 'Nil), 'Nil,
+          sexp('map, 'f, sexp('::, 'h, 't)),
+            sexp('::, sexp('f, 'h), sexp('map, 'f, 't))),
+        sexp('map, sexp('λ, sexp('x), sexp('+, 'x, n(1))), sexp('::, n(1), sexp('::, n(2), 'Nil)))
+      ))._2 ==> Val.Data('::, Seq(n(2), Val.Data('::, Seq(n(3), Val.Data('Nil, Seq())))))
+    }
   }
 
 }
