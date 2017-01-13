@@ -52,6 +52,8 @@ object Interpreter {
     }.flatten
 
     val defs: Seq[(Val.Sym, Val)] = program.collect {
+      case Val.Sexp(S.`def` :: (name: Val.Sym) :: value :: Nil) =>
+        name -> eval(value, ctxt)(global).value // No recursion taking place here, so it's fine to escape eval context
       case Val.Sexp(S.`def` :: d) =>
         val pairs = d.grouped(2).toList
         val Val.Sexp((name: Val.Sym) :: _) :: _ = pairs.head

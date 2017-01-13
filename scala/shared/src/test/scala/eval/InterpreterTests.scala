@@ -113,7 +113,7 @@ object InterpreterTests extends TestSuite{
         sexp('def,
           sexp('foo, n(0)), n(0),
           sexp('foo, 'n), sexp('foo, sexp('-, 'n, n(1)))),
-        sexp('foo, n(1000000))
+        sexp('foo, n(100000))
       ))
     }
     "lexical scope in defs" - {
@@ -124,6 +124,12 @@ object InterpreterTests extends TestSuite{
           sexp('x, sexp('λ, sexp(), n(20)))
         ), sexp('foo))
       ))._2 ==> n(10)
+    }
+    "simple non-function def" - {
+      Interpreter.evalProgram(List(
+        sexp('def, 'foo, n(10)),
+        sexp('+, 'foo, n(3))
+      ))._2 ==> n(13)
     }
   }
 
