@@ -107,14 +107,23 @@ object InterpreterTests extends TestSuite{
             sexp('y, sexp('+, 'x, n(2)))),
           sexp('+, 'x, 'y))
       ) ==> n(4)
-      "deep recursion" - {
-        Interpreter.evalProgram(List(
-          sexp('def,
-            sexp('foo, n(0)), n(0),
-            sexp('foo, 'n), sexp('foo, sexp('-, 'n, n(1)))),
-          sexp('foo, n(1000000))
-        ))
-      }
+    }
+    "deep recursion" - {
+      Interpreter.evalProgram(List(
+        sexp('def,
+          sexp('foo, n(0)), n(0),
+          sexp('foo, 'n), sexp('foo, sexp('-, 'n, n(1)))),
+        sexp('foo, n(1000000))
+      ))
+    }
+    "lexical scope in defs" - {
+      Interpreter.evalProgram(List(
+        sexp('def, sexp('x), n(10)),
+        sexp('def, sexp('foo), sexp('x)),
+        sexp('let, sexp(
+          sexp('x, sexp('λ, sexp(), n(20)))
+        ), sexp('foo))
+      ))._2 ==> n(10)
     }
   }
 

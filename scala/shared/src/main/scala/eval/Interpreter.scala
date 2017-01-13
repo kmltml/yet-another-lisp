@@ -59,7 +59,7 @@ object Interpreter {
           case Seq(Val.Sexp(`name` :: patterns), body) =>
             patterns -> body
         }
-        name -> Val.Def(bodies)
+        name -> Val.Def(bodies, ctxt)
     }
     val lastExp = program.lastOption.filter {
       case Val.Sexp(S.`def` :: _) => false
@@ -140,7 +140,7 @@ object Interpreter {
           ret <- eval(body, innerContext)
         } yield ret
 
-      case Val.Def(bodies) =>
+      case Val.Def(bodies, bodyContext) =>
         args.traverseU(eval(_, ctxt)).flatMap { argValues =>
           bodies.foldLeft(Eval.now(None: Option[Val])) { case (e, (patterns, body)) =>
             e.flatMap {
@@ -151,7 +151,7 @@ object Interpreter {
                 }.flatMap { results =>
                   val binds = results.sequenceU.map(_.foldLeft(Map.empty[Val.Sym, Val])(_ ++ _))
                   binds match {
-                    case Some(b) => Eval.defer(eval(body, ctxt ++ b)).map(Option(_))
+                    case Some(b) => Eval.defer(eval(body, bodyContext ++ b)).map(Option(_))
                     case None => Eval.now(None: Option[Val])
                   }
                 }
