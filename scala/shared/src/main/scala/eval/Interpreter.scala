@@ -13,8 +13,8 @@ object Interpreter {
     "=" -> { case List(a, b) => if(a == b) S.`true` else S.`false` },
     ">" -> { case List(Val.Num(a), Val.Num(b)) => if(a > b) S.`true` else S.`false` },
     "<" -> { case List(Val.Num(a), Val.Num(b)) => if(a < b) S.`true` else S.`false` },
-    "<=" -> { case List(Val.Num(a), Val.Num(b)) => if(a >= b) S.`true` else S.`false` },
-    ">=" -> { case List(Val.Num(a), Val.Num(b)) => if(a <= b) S.`true` else S.`false` }
+    "<=" -> { case List(Val.Num(a), Val.Num(b)) => if(a <= b) S.`true` else S.`false` },
+    ">=" -> { case List(Val.Num(a), Val.Num(b)) => if(a >= b) S.`true` else S.`false` }
   )
 
   val prelude: ModuleContext = new ModuleContext(

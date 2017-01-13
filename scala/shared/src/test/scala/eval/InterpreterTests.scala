@@ -16,6 +16,23 @@ object InterpreterTests extends TestSuite{
     "2 + 3 = 5" - {
       eval(sexp('+, n(2), n(3))) ==> n(5)
     }
+    "comparison operators" - {
+      eval(sexp('= , n(2), n(2))) ==> sym('true)
+      eval(sexp('= , n(1), n(2))) ==> sym('false)
+      eval(sexp('> , n(3), n(2))) ==> sym('true)
+      eval(sexp('> , n(2), n(2))) ==> sym('false)
+      eval(sexp('> , n(1), n(2))) ==> sym('false)
+      eval(sexp('>=, n(3), n(2))) ==> sym('true)
+      eval(sexp('>=, n(2), n(2))) ==> sym('true)
+      eval(sexp('>=, n(1), n(2))) ==> sym('false)
+      eval(sexp('< , n(3), n(2))) ==> sym('false)
+      eval(sexp('< , n(2), n(2))) ==> sym('false)
+      eval(sexp('< , n(1), n(2))) ==> sym('true)
+      eval(sexp('<=, n(3), n(2))) ==> sym('false)
+      eval(sexp('<=, n(2), n(2))) ==> sym('true)
+      eval(sexp('<=, n(1), n(2))) ==> sym('true)
+
+    }
     "an if expression" - {
       eval(sexp('if, sexp('=, n(1), n(1)), n(1), n(0))) ==> n(1)
       eval(sexp('if, sexp('=, n(1), n(2)), n(1), n(0))) ==> n(0)
