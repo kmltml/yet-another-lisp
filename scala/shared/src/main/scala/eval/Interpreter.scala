@@ -13,8 +13,8 @@ object Interpreter {
     "=" -> { case List(a, b) => if(a == b) S.`true` else S.`false` },
     ">" -> { case List(Val.Num(a), Val.Num(b)) => if(a > b) S.`true` else S.`false` },
     "<" -> { case List(Val.Num(a), Val.Num(b)) => if(a < b) S.`true` else S.`false` },
-    "<=" -> { case List(Val.Num(a), Val.Num(b)) => if(a >= b) S.`true` else S.`false` },
-    ">=" -> { case List(Val.Num(a), Val.Num(b)) => if(a <= b) S.`true` else S.`false` }
+    "<=" -> { case List(Val.Num(a), Val.Num(b)) => if(a <= b) S.`true` else S.`false` },
+    ">=" -> { case List(Val.Num(a), Val.Num(b)) => if(a >= b) S.`true` else S.`false` }
   )
 
   val prelude: ModuleContext = new ModuleContext(
@@ -52,6 +52,8 @@ object Interpreter {
     }.flatten
 
     val defs: Seq[(Val.Sym, Val)] = program.collect {
+      case Val.Sexp(S.`def` :: (name: Val.Sym) :: value :: Nil) =>
+        name -> eval(value, ctxt)(global).value // No recursion taking place here, so it's fine to escape eval context
       case Val.Sexp(S.`def` :: d) =>
         val pairs = d.grouped(2).toList
         val Val.Sexp((name: Val.Sym) :: _) :: _ = pairs.head
@@ -59,7 +61,7 @@ object Interpreter {
           case Seq(Val.Sexp(`name` :: patterns), body) =>
             patterns -> body
         }
-        name -> Val.Def(bodies)
+        name -> Val.Def(bodies, ctxt)
     }
     val lastExp = program.lastOption.filter {
       case Val.Sexp(S.`def` :: _) => false
@@ -67,107 +69,133 @@ object Interpreter {
     }
     val moduleContext = new ModuleContext((defs ++ dataDefs).toMap, imports = Seq(Val.Sym("prelude")))
     val newGlobal = new Global(global.moduleContexts + (module -> moduleContext))
-    (newGlobal, lastExp.map(eval(_, ctxt)(newGlobal)).getOrElse(S.nil))
+    (newGlobal, lastExp.map(eval(_, ctxt)(newGlobal).value).getOrElse(S.nil))
 
   }
 
-  def eval(v: Val, ctxt: Context)(implicit global: Global): Val = v match {
-    case _: Val.Num | _: Val.Str => v
+  def eval(v: Val, ctxt: Context)(implicit global: Global): Eval[Val] = v match {
+    case _: Val.Num | _: Val.Str => Eval.now(v)
 
-    case s: Val.Sym => ctxt(s)
+    case s: Val.Sym =>
+      val x = ctxt(s)
       .orElse(global.moduleContexts(ctxt.module).defs.get(s))
       .orElse(global.moduleContexts(ctxt.module).imports.view
         .map(global.moduleContexts(_).defs.get(s))
         .collectFirst {
           case Some(v) => v
         }).get
+      Eval.now(x)
 
     case Val.Sexp(fn :: args) => apply(ctxt, fn, args)
   }
 
-  def apply(ctxt: Context, fn: Val, args: List[Val])(implicit global: Global): Val = fn match {
+  def apply(ctxt: Context, fn: Val, args: List[Val])(implicit global: Global): Eval[Val] = fn match {
     case S.`if` =>
       val List(cond, t, f) = args
-      eval(cond, ctxt) match {
+      eval(cond, ctxt) flatMap {
         case S.`true` => eval(t, ctxt)
         case _ => eval(f, ctxt)
       }
+
+    case S.let =>
+      val List(Val.Sexp(lets), body) = args
+      val newCtxt = lets.foldLeft(Eval.now(ctxt)) {
+        case (c, Val.Sexp(List((name: Val.Sym), value))) =>
+          for {
+            context <- c
+            v <- eval(value, context)
+          } yield context + (name -> v)
+      }
+      newCtxt.flatMap(eval(body, _))
+
     case S.lambda | S.λ =>
       val List(Val.Sexp(a), body) = args
-      Val.Lambda(a.map { case s: Val.Sym => s }, body, ctxt)
+      Eval.now(Val.Lambda(a.map { case s: Val.Sym => s }, body, ctxt))
 
     case S.`match` =>
       val v :: patterns = args
-      val matchee = eval(v, ctxt)
-
-      patterns.view.map {
-        case Val.Sexp(List(pattern, body)) =>
-          val res = patmat(ctxt, matchee, pattern)
-          res.map { binds =>
-            eval(body, ctxt ++ binds)
-          }
-      }.collectFirst {
-        case Some(v) => v
-      }.getOrElse(throw new AssertionError("Match error!"))
-
-    case _ => eval(fn, ctxt) match {
-      case Val.Builtin(f) => f(args.map(eval(_, ctxt)))
-      case Val.Lambda(argNames, body, c) =>
-        val bindings = argNames zip args.map(eval(_, ctxt))
-        val innerContext = c ++ bindings
-        eval(body, innerContext)
-      case Val.Def(bodies) =>
-        val argValues = args.map(eval(_, ctxt))
-        bodies.view.map {
-          case (patterns, body) =>
-            val results = (patterns zip argValues).traverseU {
-              case (pat, v) => patmat(ctxt, v, pat)
+      eval(v, ctxt).flatMap { matchee =>
+        val x = patterns.traverseU {
+          case Val.Sexp(List(pattern, body)) =>
+            patmat(ctxt, matchee, pattern).flatMap { res =>
+              res.map { binds =>
+                eval(body, ctxt ++ binds)
+              } match {
+                case Some(e) => e.map(Option(_))
+                case None => Eval.now(Option.empty[Val])
+              }
             }
-            val binds = results.map(_.foldLeft(Map.empty[Val.Sym, Val])(_ ++ _))
-            binds.map(b => eval(body, ctxt ++ b))
-        }.collectFirst {
+        }
+        x.map(_.collectFirst {
           case Some(v) => v
-        }.get
+        }.getOrElse(throw new AssertionError("Match error!")))
+      }
+
+    case _ => eval(fn, ctxt) flatMap {
+      case Val.Builtin(f) =>
+        args.traverseU(eval(_, ctxt)).map(f)
+      case Val.Lambda(argNames, body, c) =>
+        val bindings = args.traverseU(eval(_, ctxt)).map(argNames zip _)
+        for {
+          bs <- bindings
+          innerContext = c ++ bs
+          ret <- eval(body, innerContext)
+        } yield ret
+
+      case Val.Def(bodies, bodyContext) =>
+        args.traverseU(eval(_, ctxt)).flatMap { argValues =>
+          bodies.foldLeft(Eval.now(None: Option[Val])) { case (e, (patterns, body)) =>
+            e.flatMap {
+              case Some(_) => e
+              case None =>
+                (patterns zip argValues).traverseU {
+                  case (pat, v) => patmat(ctxt, v, pat)
+                }.flatMap { results =>
+                  val binds = results.sequenceU.map(_.foldLeft(Map.empty[Val.Sym, Val])(_ ++ _))
+                  binds match {
+                    case Some(b) => Eval.defer(eval(body, bodyContext ++ b)).map(Option(_))
+                    case None => Eval.now(None: Option[Val])
+                  }
+                }
+            }
+          }.map(_.getOrElse(throw new AssertionError(s"Match error: Can't match $argValues to any of ${ bodies.map(_._1) }")))
+        }
     }
   }
 
-  def patmat(ctxt: Context, matchee: Val, pattern: Val)(implicit global: Global): Option[Map[Val.Sym, Val]] = pattern match {
+  def patmat(ctxt: Context, matchee: Val, pattern: Val)(implicit global: Global): Eval[Option[Map[Val.Sym, Val]]] = pattern match {
     case Val.Num(v) =>
-      matchee match {
+      Eval.now(matchee match {
         case Val.Num(`v`) => Some(Map.empty)
         case _ => None
-      }
+      })
 
     case Val.Str(v) =>
-      matchee match {
+      Eval.now(matchee match {
         case Val.Str(`v`) => Some(Map.empty)
+        case _ => None
+      })
+
+    case S.`_` => Eval.now(Some(Map.empty))
+
+    case s @ Val.Sym(name) if name(0).isUpper =>
+      eval(s, ctxt).map {
+        case x if x == matchee => Some(Map.empty)
         case _ => None
       }
 
-    case S.`_` => Some(Map.empty)
-
-    case s @ Val.Sym(name) if name(0).isUpper =>
-      if(eval(s, ctxt) == matchee)
-        Some(Map.empty)
-      else
-        None
-
     case s: Val.Sym =>
-      Some(Map(s -> matchee))
+      Eval.now(Some(Map(s -> matchee)))
 
     case Val.Sexp((constr: Val.Sym) :: args) =>
       matchee match {
         case Val.Data(`constr`, members) =>
           assert(members.length == args.length, "Wrong number of parameters in adt pattern!")
-          val results = (args zip members).map {
+          (args zip members).traverseU {
             case (p, v) => patmat(ctxt, v, p)
-          }
-          results.foldLeft(Some(Map.empty): Option[Map[Val.Sym, Val]]) {
-            case (None, _) => None
-            case (Some(a), Some(b)) => Some(a ++ b)
-            case (_, None) => None
-          }
-        case _ => None
+          }.map(_.sequenceU.map(_.reduce(_ ++ _)))
+
+        case _ => Eval.now(None)
       }
   }
 

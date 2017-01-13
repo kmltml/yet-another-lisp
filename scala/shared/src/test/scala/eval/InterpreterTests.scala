@@ -8,13 +8,30 @@ object InterpreterTests extends TestSuite{
   def n(n: Double): Val.Num = Val.Num(n)
   def s(s: String): Val.Str = Val.Str(s)
 
-  def eval(v: Val): Val = Interpreter.eval(v, Interpreter.defaultContext)(Interpreter.defaultGlobal)
+  def eval(v: Val): Val = Interpreter.eval(v, Interpreter.defaultContext)(Interpreter.defaultGlobal).value
 
   implicit def sym(s: Symbol): Val.Sym = Val.Sym(s.name)
 
   val tests = apply {
     "2 + 3 = 5" - {
       eval(sexp('+, n(2), n(3))) ==> n(5)
+    }
+    "comparison operators" - {
+      eval(sexp('= , n(2), n(2))) ==> sym('true)
+      eval(sexp('= , n(1), n(2))) ==> sym('false)
+      eval(sexp('> , n(3), n(2))) ==> sym('true)
+      eval(sexp('> , n(2), n(2))) ==> sym('false)
+      eval(sexp('> , n(1), n(2))) ==> sym('false)
+      eval(sexp('>=, n(3), n(2))) ==> sym('true)
+      eval(sexp('>=, n(2), n(2))) ==> sym('true)
+      eval(sexp('>=, n(1), n(2))) ==> sym('false)
+      eval(sexp('< , n(3), n(2))) ==> sym('false)
+      eval(sexp('< , n(2), n(2))) ==> sym('false)
+      eval(sexp('< , n(1), n(2))) ==> sym('true)
+      eval(sexp('<=, n(3), n(2))) ==> sym('false)
+      eval(sexp('<=, n(2), n(2))) ==> sym('true)
+      eval(sexp('<=, n(1), n(2))) ==> sym('true)
+
     }
     "an if expression" - {
       eval(sexp('if, sexp('=, n(1), n(1)), n(1), n(0))) ==> n(1)
@@ -81,6 +98,38 @@ object InterpreterTests extends TestSuite{
             sexp('::, sexp('f, 'h), sexp('map, 'f, 't))),
         sexp('map, sexp('λ, sexp('x), sexp('+, 'x, n(1))), sexp('::, n(1), sexp('::, n(2), 'Nil)))
       ))._2 ==> Val.Data('::, Seq(n(2), Val.Data('::, Seq(n(3), Val.Data('Nil, Seq())))))
+    }
+    "let form" - {
+      eval(
+        sexp('let,
+          sexp(
+            sexp('x, n(1)),
+            sexp('y, sexp('+, 'x, n(2)))),
+          sexp('+, 'x, 'y))
+      ) ==> n(4)
+    }
+    "deep recursion" - {
+      Interpreter.evalProgram(List(
+        sexp('def,
+          sexp('foo, n(0)), n(0),
+          sexp('foo, 'n), sexp('foo, sexp('-, 'n, n(1)))),
+        sexp('foo, n(100000))
+      ))
+    }
+    "lexical scope in defs" - {
+      Interpreter.evalProgram(List(
+        sexp('def, sexp('x), n(10)),
+        sexp('def, sexp('foo), sexp('x)),
+        sexp('let, sexp(
+          sexp('x, sexp('λ, sexp(), n(20)))
+        ), sexp('foo))
+      ))._2 ==> n(10)
+    }
+    "simple non-function def" - {
+      Interpreter.evalProgram(List(
+        sexp('def, 'foo, n(10)),
+        sexp('+, 'foo, n(3))
+      ))._2 ==> n(13)
     }
   }
 
