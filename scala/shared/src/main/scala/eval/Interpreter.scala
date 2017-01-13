@@ -92,6 +92,16 @@ object Interpreter {
         case S.`true` => eval(t, ctxt)
         case _ => eval(f, ctxt)
       }
+
+    case S.let =>
+      val List(Val.Sexp(lets), body) = args
+      val newCtxt = lets.foldLeft(ctxt) {
+        case (c, Val.Sexp(List((name: Val.Sym), value))) =>
+          val v = eval(value, c)
+          c + (name -> v)
+      }
+      eval(body, newCtxt)
+
     case S.lambda | S.λ =>
       val List(Val.Sexp(a), body) = args
       Val.Lambda(a.map { case s: Val.Sym => s }, body, ctxt)

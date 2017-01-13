@@ -99,6 +99,15 @@ object InterpreterTests extends TestSuite{
         sexp('map, sexp('λ, sexp('x), sexp('+, 'x, n(1))), sexp('::, n(1), sexp('::, n(2), 'Nil)))
       ))._2 ==> Val.Data('::, Seq(n(2), Val.Data('::, Seq(n(3), Val.Data('Nil, Seq())))))
     }
+    "let form" - {
+      eval(
+        sexp('let,
+          sexp(
+            sexp('x, n(1)),
+            sexp('y, sexp('+, 'x, n(2)))),
+          sexp('+, 'x, 'y))
+      ) ==> n(4)
+    }
   }
 
 }
