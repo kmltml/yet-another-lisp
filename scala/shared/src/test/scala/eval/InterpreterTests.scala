@@ -8,7 +8,7 @@ object InterpreterTests extends TestSuite{
   def n(n: Double): Val.Num = Val.Num(n)
   def s(s: String): Val.Str = Val.Str(s)
 
-  def eval(v: Val): Val = Interpreter.eval(v, Interpreter.defaultContext)(Interpreter.defaultGlobal)
+  def eval(v: Val): Val = Interpreter.eval(v, Interpreter.defaultContext)(Interpreter.defaultGlobal).value
 
   implicit def sym(s: Symbol): Val.Sym = Val.Sym(s.name)
 
@@ -107,6 +107,14 @@ object InterpreterTests extends TestSuite{
             sexp('y, sexp('+, 'x, n(2)))),
           sexp('+, 'x, 'y))
       ) ==> n(4)
+      "deep recursion" - {
+        Interpreter.evalProgram(List(
+          sexp('def,
+            sexp('foo, n(0)), n(0),
+            sexp('foo, 'n), sexp('foo, sexp('-, 'n, n(1)))),
+          sexp('foo, n(1000000))
+        ))
+      }
     }
   }
 
