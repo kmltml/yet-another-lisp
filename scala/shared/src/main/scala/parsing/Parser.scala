@@ -19,7 +19,7 @@ class Parser {
     P(Start ~ expression.rep ~ End)
 
 
-  val expression: P[SVal] = P(string | symbol | number | sexp | vec)
+  val expression: P[SVal] = P(string | symbol | number | sexp | vec | quot)
 
 
   val string: P[SVal.Str] =
@@ -30,6 +30,10 @@ class Parser {
   val symbol: P[SVal.Sym] =
     P((CharPred(isSymbolStartChar) ~~ CharsWhile(isSymbolChar, 0)).!)
     .map(SVal.Sym)
+
+  val quot: P[SVal.Quot] =
+    P("'" ~ symbol)
+    .map { case SVal.Sym(s) => SVal.Quot(s) }
 
 
   val number: P[SVal.Num] =

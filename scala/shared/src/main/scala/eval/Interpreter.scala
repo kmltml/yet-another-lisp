@@ -22,8 +22,14 @@ object Interpreter {
     imports = Seq.empty
   )
 
-  private def binOp(f: (Double, Double) => Double)(args: List[Val]): Val =
-    Val.Num(args.map{ case Val.Num(n) => n }.reduce(f))
+  private def binOp(f: (Double, Double) => Double)(args: List[Val]): Val = {
+    args match {
+      case Val.Num(v) :: Nil =>
+        Val.Builtin(a => Val.Num(a.map{ case Val.Num(n) => n }.foldLeft(v)(f)))
+      case _ :: _ :: _ => // at least two elements
+        Val.Num(args.map{ case Val.Num(n) => n }.reduce(f))
+    }
+  }
 
 //  def defaultContext: Context = Context(
 //    builtinFunctions.map{ case (k, v) => Val.Sym(k) -> Val.Builtin(v) },
@@ -37,6 +43,10 @@ object Interpreter {
   def evalProgram(program: List[Val], global: Global = defaultGlobal): (Global, Val) = {
     val module = Val.Sym("default")
     val ctxt = Context.empty(module)
+
+    val imports: Seq[Val.Sym] = program.collect {
+      case Val.Sexp(S.`import` :: (name: Val.Sym) :: Nil) => name
+    }
 
     val dataDefs: Seq[(Val.Sym, Val)] = program.collect {
       case Val.Sexp(S.data :: Val.Sexp(_) :: cs) =>
@@ -52,9 +62,7 @@ object Interpreter {
     }.flatten
 
     val defs: Seq[(Val.Sym, Val)] = program.collect {
-      case Val.Sexp(S.`def` :: (name: Val.Sym) :: value :: Nil) =>
-        name -> eval(value, ctxt)(global).value // No recursion taking place here, so it's fine to escape eval context
-      case Val.Sexp(S.`def` :: d) =>
+      case Val.Sexp(S.`def` :: d) if d.head.isInstanceOf[Val.Sexp] =>
         val pairs = d.grouped(2).toList
         val Val.Sexp((name: Val.Sym) :: _) :: _ = pairs.head
         val bodies = pairs map {
@@ -67,9 +75,15 @@ object Interpreter {
       case Val.Sexp(S.`def` :: _) => false
       case _ => true
     }
-    val moduleContext = new ModuleContext((defs ++ dataDefs).toMap, imports = Seq(Val.Sym("prelude")))
+    val moduleContext = new ModuleContext((defs ++ dataDefs).toMap, Val.Sym("prelude") +: imports)
     val newGlobal = new Global(global.moduleContexts + (module -> moduleContext))
-    (newGlobal, lastExp.map(eval(_, ctxt)(newGlobal).value).getOrElse(S.nil))
+    val constDefs: Seq[(Val.Sym, Val)] = program.foldLeft(ctxt) {
+      case (ctxt, Val.Sexp(S.`def` :: (name: Val.Sym) :: value :: Nil)) =>
+        ctxt + (name -> eval(value, ctxt)(newGlobal).value) // No recursion taking place here, so it's fine to escape eval context)
+      case (ctxt, _) => ctxt
+    }.bindings.toSeq
+    val newerGlobal = new Global(global.moduleContexts + (module -> (moduleContext ++ constDefs)))
+    (newGlobal, lastExp.map(eval(_, ctxt)(newerGlobal).value).getOrElse(S.nil))
 
   }
 
@@ -83,13 +97,26 @@ object Interpreter {
         .map(global.moduleContexts(_).defs.get(s))
         .collectFirst {
           case Some(v) => v
-        }).get
+        }).getOrElse(throw new AssertionError(s"undefined symbol: $s"))
       Eval.now(x)
 
-    case Val.Sexp(fn :: args) => apply(ctxt, fn, args)
+    case Val.Sexp(fn :: args) => prefix(ctxt, fn, args)
   }
 
-  def apply(ctxt: Context, fn: Val, args: List[Val])(implicit global: Global): Eval[Val] = fn match {
+  def prefix(ctxt: Context, fn: Val, args: List[Val])(implicit global: Global): Eval[Val] = fn match {
+    case S.symbol =>
+      val List(s: Val.Sym) = args
+      Eval.now(s)
+
+    case S.sexp =>
+      args.traverseU {
+        case Val.Sexp(Val.Sym("...") :: splice :: Nil) =>
+          eval(splice, ctxt).map {
+            case Val.Sexp(vs) => vs
+          }
+        case arg => eval(arg, ctxt).map(List(_))
+      }.map(vs => Val.Sexp(vs.flatten))
+
     case S.`if` =>
       val List(cond, t, f) = args
       eval(cond, ctxt) flatMap {
@@ -131,24 +158,45 @@ object Interpreter {
         }.getOrElse(throw new AssertionError("Match error!")))
       }
 
-    case _ => eval(fn, ctxt) flatMap {
-      case Val.Builtin(f) =>
-        args.traverseU(eval(_, ctxt)).map(f)
-      case Val.Lambda(argNames, body, c) =>
-        val bindings = args.traverseU(eval(_, ctxt)).map(argNames zip _)
-        for {
-          bs <- bindings
-          innerContext = c ++ bs
-          ret <- eval(body, innerContext)
-        } yield ret
+    case S.`debug-print` =>
+      def debugPrint(v: Val): String = v match {
+        case Val.Sym(s) => s"'$s"
+        case Val.Num(n) => s"n($n)"
+        case Val.Sexp(s) => s.map(debugPrint).mkString("sexp(", ", ", ")")
+      }
+      Eval.now(Val.Str(args.map(debugPrint).mkString(", \n")))
 
-      case Val.Def(bodies, bodyContext) =>
-        args.traverseU(eval(_, ctxt)).flatMap { argValues =>
+    case _ =>
+      eval(fn, ctxt).flatMap {
+        case fn: Val.Fun =>
+          for {
+            args <- args.traverseU(eval(_, ctxt))
+            v <- applyFun(fn, args, ctxt)
+          } yield v
+      }
+
+  }
+
+  def applyFun(fn: Val.Fun, args: List[Val], ctxt: Context)(implicit global: Global): Eval[Val] = {
+    fn match {
+      case Val.Builtin(f) => Eval.now(f(args))
+      case Val.Lambda(argNames, body, c) =>
+        if(argNames.size > args.size) {
+          Eval.now(Val.Builtin { a => applyFun(fn, args ++ a, ctxt).value }) // TODO Should `Builtin#run`'s type be changed to List[Val] => Eval[Val] ?
+        } else {
+          val bindings = argNames zip args
+          val innerContext = c ++ bindings
+          eval(body, innerContext)
+        }
+      case d @ Val.Def(bodies, bodyContext) =>
+        if(d.numParams > args.size) {
+          Eval.now(Val.Builtin { a => applyFun(fn, args ++ a, ctxt).value })
+        } else {
           bodies.foldLeft(Eval.now(None: Option[Val])) { case (e, (patterns, body)) =>
             e.flatMap {
               case Some(_) => e
               case None =>
-                (patterns zip argValues).traverseU {
+                (patterns zip args).traverseU {
                   case (pat, v) => patmat(ctxt, v, pat)
                 }.flatMap { results =>
                   val binds = results.sequenceU.map(_.foldLeft(Map.empty[Val.Sym, Val])(_ ++ _))
@@ -158,7 +206,7 @@ object Interpreter {
                   }
                 }
             }
-          }.map(_.getOrElse(throw new AssertionError(s"Match error: Can't match $argValues to any of ${ bodies.map(_._1) }")))
+          }.map(_.getOrElse(throw new AssertionError(s"Match error: Can't match $args to any of ${ bodies.map(_._1) }")))
         }
     }
   }
@@ -186,6 +234,29 @@ object Interpreter {
 
     case s: Val.Sym =>
       Eval.now(Some(Map(s -> matchee)))
+
+    case Val.Sexp(S.sexp :: pats) =>
+      val restPattern = pats.lastOption.collect {
+        case Val.Sexp(Val.Sym("...") :: p :: Nil) => p
+      }
+      (matchee, restPattern) match {
+        case (Val.Sexp(elems), Some(rest))
+          if elems.size >= (pats.size - 1) =>
+
+          val elemMatches = (pats.init zip elems).traverseU {
+            case (p, v) => patmat(ctxt, v, p)
+          }
+          (elemMatches, patmat(ctxt, Val.Sexp(elems.drop(pats.size - 1)), rest)).map2(_ :+ _)
+            .map(_.sequenceU.map(_.foldLeft(Map.empty[Val.Sym, Val])(_ ++ _)))
+
+
+        case (Val.Sexp(elems), None) if elems.size == pats.size =>
+          (pats zip elems).traverseU {
+            case (p, v) => patmat(ctxt, v, p)
+          }.map(_.sequenceU.map(_.foldLeft(Map.empty[Val.Sym, Val])(_ ++ _)))
+
+        case _ => Eval.now(None)
+      }
 
     case Val.Sexp((constr: Val.Sym) :: args) =>
       matchee match {

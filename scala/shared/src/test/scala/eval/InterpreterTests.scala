@@ -5,12 +5,14 @@ import utest._
 object InterpreterTests extends TestSuite{
 
   def sexp(vals: Val*): Val.Sexp = Val.Sexp(vals.toList)
+  def v(vals: Val*): Val.Sexp = Val.Sexp(sym('sexp) +: vals.toList)
   def n(n: Double): Val.Num = Val.Num(n)
   def s(s: String): Val.Str = Val.Str(s)
 
   def eval(v: Val): Val = Interpreter.eval(v, Interpreter.defaultContext)(Interpreter.defaultGlobal).value
 
   implicit def sym(s: Symbol): Val.Sym = Val.Sym(s.name)
+  def sym(s: String): Val.Sym = Val.Sym(s)
 
   val tests = apply {
     "2 + 3 = 5" - {
@@ -130,6 +132,67 @@ object InterpreterTests extends TestSuite{
         sexp('def, 'foo, n(10)),
         sexp('+, 'foo, n(3))
       ))._2 ==> n(13)
+    }
+    "partial application of built-in functions" - {
+      eval(sexp(sexp('+, n(2)), n(3))) ==> n(5)
+      eval(sexp(sexp('-, n(2)), n(3))) ==> n(-1)
+      eval(sexp(sexp('*, n(2)), n(3))) ==> n(6)
+      eval(sexp(sexp('/, n(2)), n(3))) ==> n(2.0/3.0)
+    }
+    "partial application of lambdas" - {
+      eval(sexp(sexp(sexp('λ, sexp('x, 'y), sexp('+, 'x, 'y)), n(2)), n(3))) ==> n(5)
+    }
+    "partial application of defs" - {
+      Interpreter.evalProgram(List(
+        sexp('def, sexp('add, 'x, 'y), sexp('+, 'x, 'y)),
+        sexp(sexp('add, n(1)), n(2))
+      ))._2 ==> n(3)
+    }
+    "sequential dependence of constant defs" - {
+      Interpreter.evalProgram(List(
+        sexp('def, 'x, n(1)),
+        sexp('def, 'y, sexp('+, 'x, n(10))),
+        'y
+      ))._2 ==> n(11)
+    }
+    "sequential dependence of constant and function defs" - {
+      Interpreter.evalProgram(List(
+        sexp('def, sexp('++, 'x), sexp('+, 'x, n(1))),
+        sexp('def, 'x, sexp('++, n(10))),
+        'x
+      ))._2 ==> n(11)
+    }
+    "point-free list sum" - {
+      Interpreter.evalProgram(List(
+        sexp('data, sexp('List, 'a),
+          sexp('::, 'a, sexp('List, 'a)),
+          sexp('Nil)),
+        sexp('def,
+          sexp('foldl, '_, 'i, 'Nil), 'i,
+          sexp('foldl, 'f, 'i, sexp('::, 'a, 'as)),
+            sexp('foldl, 'f, sexp('f, 'i, 'a), 'as)),
+        sexp('def, 'sum, sexp('foldl, '+, n(0))),
+        sexp('sum, sexp('::, n(1), sexp('::, n(2), sexp('::, n(3), sexp('::, n(4), 'Nil)))))))._2 ==> n(10)
+    }
+    "pattern matching on sexps" - {
+      eval(sexp('match, sexp('sexp, n(1), n(2), n(3)),
+        sexp(sexp('sexp, 'x, 'y), sexp('*, 'x, 'y)),
+        sexp(sexp('sexp, n(1), n(2), 'n), 'n))) ==> n(3)
+
+      eval(sexp('match, sexp('sexp, n(1), n(2)),
+        sexp(sexp('sexp, 'x, 'y), sexp('*, 'x, 'y)),
+        sexp(sexp('sexp, n(1), n(2), 'n), 'n))) ==> n(2)
+
+      eval(sexp('match, sexp('sexp),
+        sexp(sexp('sexp), n(1)))) ==> n(1)
+    }
+    "pattern matching rest pattern on sexps" - {
+      eval(sexp('match, sexp('sexp, n(1), n(2), n(3)),
+        sexp(sexp('sexp, 'x, sexp(sym("..."), '_)), 'x))) ==> n(1)
+    }
+    "splicing sexps" - {
+      eval(v(n(1), sexp(sym("..."), v(n(2), n(3))), n(4), sexp(sym("..."), v(n(5))))) ==>
+        sexp(n(1), n(2), n(3), n(4), n(5))
     }
   }
 
