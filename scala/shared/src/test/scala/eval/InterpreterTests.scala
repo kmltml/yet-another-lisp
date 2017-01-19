@@ -194,6 +194,11 @@ object InterpreterTests extends TestSuite{
       eval(v(n(1), sexp(sym("..."), v(n(2), n(3))), n(4), sexp(sym("..."), v(n(5))))) ==>
         sexp(n(1), n(2), n(3), n(4), n(5))
     }
+    "source quoting" - {
+      val foo = sexp('foo, n(10), sexp('+, n(2), s("four")))
+      eval(sexp('quote, foo)) ==> foo
+      eval(sexp('quote, 'foo)) ==> sym('foo)
+    }
   }
 
 }
