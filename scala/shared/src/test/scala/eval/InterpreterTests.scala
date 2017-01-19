@@ -5,12 +5,14 @@ import utest._
 object InterpreterTests extends TestSuite{
 
   def sexp(vals: Val*): Val.Sexp = Val.Sexp(vals.toList)
+  def v(vals: Val*): Val.Sexp = Val.Sexp(sym('sexp) +: vals.toList)
   def n(n: Double): Val.Num = Val.Num(n)
   def s(s: String): Val.Str = Val.Str(s)
 
   def eval(v: Val): Val = Interpreter.eval(v, Interpreter.defaultContext)(Interpreter.defaultGlobal).value
 
   implicit def sym(s: Symbol): Val.Sym = Val.Sym(s.name)
+  def sym(s: String): Val.Sym = Val.Sym(s)
 
   val tests = apply {
     "2 + 3 = 5" - {
@@ -171,6 +173,26 @@ object InterpreterTests extends TestSuite{
             sexp('foldl, 'f, sexp('f, 'i, 'a), 'as)),
         sexp('def, 'sum, sexp('foldl, '+, n(0))),
         sexp('sum, sexp('::, n(1), sexp('::, n(2), sexp('::, n(3), sexp('::, n(4), 'Nil)))))))._2 ==> n(10)
+    }
+    "pattern matching on sexps" - {
+      eval(sexp('match, sexp('sexp, n(1), n(2), n(3)),
+        sexp(sexp('sexp, 'x, 'y), sexp('*, 'x, 'y)),
+        sexp(sexp('sexp, n(1), n(2), 'n), 'n))) ==> n(3)
+
+      eval(sexp('match, sexp('sexp, n(1), n(2)),
+        sexp(sexp('sexp, 'x, 'y), sexp('*, 'x, 'y)),
+        sexp(sexp('sexp, n(1), n(2), 'n), 'n))) ==> n(2)
+
+      eval(sexp('match, sexp('sexp),
+        sexp(sexp('sexp), n(1)))) ==> n(1)
+    }
+    "pattern matching rest pattern on sexps" - {
+      eval(sexp('match, sexp('sexp, n(1), n(2), n(3)),
+        sexp(sexp('sexp, 'x, sexp(sym("..."), '_)), 'x))) ==> n(1)
+    }
+    "splicing sexps" - {
+      eval(v(n(1), sexp(sym("..."), v(n(2), n(3))), n(4), sexp(sym("..."), v(n(5))))) ==>
+        sexp(n(1), n(2), n(3), n(4), n(5))
     }
   }
 

@@ -107,6 +107,16 @@ object Interpreter {
     case S.symbol =>
       val List(s: Val.Sym) = args
       Eval.now(s)
+
+    case S.sexp =>
+      args.traverseU {
+        case Val.Sexp(Val.Sym("...") :: splice :: Nil) =>
+          eval(splice, ctxt).map {
+            case Val.Sexp(vs) => vs
+          }
+        case arg => eval(arg, ctxt).map(List(_))
+      }.map(vs => Val.Sexp(vs.flatten))
+
     case S.`if` =>
       val List(cond, t, f) = args
       eval(cond, ctxt) flatMap {
@@ -224,6 +234,29 @@ object Interpreter {
 
     case s: Val.Sym =>
       Eval.now(Some(Map(s -> matchee)))
+
+    case Val.Sexp(S.sexp :: pats) =>
+      val restPattern = pats.lastOption.collect {
+        case Val.Sexp(Val.Sym("...") :: p :: Nil) => p
+      }
+      (matchee, restPattern) match {
+        case (Val.Sexp(elems), Some(rest))
+          if elems.size >= (pats.size - 1) =>
+
+          val elemMatches = (pats.init zip elems).traverseU {
+            case (p, v) => patmat(ctxt, v, p)
+          }
+          (elemMatches, patmat(ctxt, Val.Sexp(elems.drop(pats.size - 1)), rest)).map2(_ :+ _)
+            .map(_.sequenceU.map(_.foldLeft(Map.empty[Val.Sym, Val])(_ ++ _)))
+
+
+        case (Val.Sexp(elems), None) if elems.size == pats.size =>
+          (pats zip elems).traverseU {
+            case (p, v) => patmat(ctxt, v, p)
+          }.map(_.sequenceU.map(_.foldLeft(Map.empty[Val.Sym, Val])(_ ++ _)))
+
+        case _ => Eval.now(None)
+      }
 
     case Val.Sexp((constr: Val.Sym) :: args) =>
       matchee match {
