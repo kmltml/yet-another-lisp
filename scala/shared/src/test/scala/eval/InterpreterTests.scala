@@ -131,6 +131,21 @@ object InterpreterTests extends TestSuite{
         sexp('+, 'foo, n(3))
       ))._2 ==> n(13)
     }
+    "partial application of built-in functions" - {
+      eval(sexp(sexp('+, n(2)), n(3))) ==> n(5)
+      eval(sexp(sexp('-, n(2)), n(3))) ==> n(-1)
+      eval(sexp(sexp('*, n(2)), n(3))) ==> n(6)
+      eval(sexp(sexp('/, n(2)), n(3))) ==> n(2.0/3.0)
+    }
+    "partial application of lambdas" - {
+      eval(sexp(sexp(sexp('λ, sexp('x, 'y), sexp('+, 'x, 'y)), n(2)), n(3))) ==> n(5)
+    }
+    "partial application of defs" - {
+      Interpreter.evalProgram(List(
+        sexp('def, sexp('add, 'x, 'y), sexp('+, 'x, 'y)),
+        sexp(sexp('add, n(1)), n(2))
+      ))._2 ==> n(3)
+    }
   }
 
 }

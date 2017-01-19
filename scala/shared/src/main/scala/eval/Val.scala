@@ -33,7 +33,9 @@ object Val {
   sealed trait Fun extends Val
   case class Builtin(run: List[Val] => Val) extends Fun
   case class Lambda(args: List[Val.Sym], body: Val, ctxt: Context) extends Fun
-  case class Def(bodies: List[(List[Val], Val)], ctxt: Context) extends Fun
+  case class Def(bodies: List[(List[Val], Val)], ctxt: Context) extends Fun {
+    def numParams = bodies.head._1.size
+  }
 
   case class Data(constructor: Val.Sym, members: Seq[Val]) extends Val
 

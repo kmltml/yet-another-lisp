@@ -22,8 +22,14 @@ object Interpreter {
     imports = Seq.empty
   )
 
-  private def binOp(f: (Double, Double) => Double)(args: List[Val]): Val =
-    Val.Num(args.map{ case Val.Num(n) => n }.reduce(f))
+  private def binOp(f: (Double, Double) => Double)(args: List[Val]): Val = {
+    args match {
+      case Val.Num(v) :: Nil =>
+        Val.Builtin(a => Val.Num(a.map{ case Val.Num(n) => n }.foldLeft(v)(f)))
+      case _ :: _ :: _ => // at least two elements
+        Val.Num(args.map{ case Val.Num(n) => n }.reduce(f))
+    }
+  }
 
 //  def defaultContext: Context = Context(
 //    builtinFunctions.map{ case (k, v) => Val.Sym(k) -> Val.Builtin(v) },
@@ -86,10 +92,10 @@ object Interpreter {
         }).get
       Eval.now(x)
 
-    case Val.Sexp(fn :: args) => apply(ctxt, fn, args)
+    case Val.Sexp(fn :: args) => prefix(ctxt, fn, args)
   }
 
-  def apply(ctxt: Context, fn: Val, args: List[Val])(implicit global: Global): Eval[Val] = fn match {
+  def prefix(ctxt: Context, fn: Val, args: List[Val])(implicit global: Global): Eval[Val] = fn match {
     case S.`if` =>
       val List(cond, t, f) = args
       eval(cond, ctxt) flatMap {
@@ -131,24 +137,37 @@ object Interpreter {
         }.getOrElse(throw new AssertionError("Match error!")))
       }
 
-    case _ => eval(fn, ctxt) flatMap {
-      case Val.Builtin(f) =>
-        args.traverseU(eval(_, ctxt)).map(f)
-      case Val.Lambda(argNames, body, c) =>
-        val bindings = args.traverseU(eval(_, ctxt)).map(argNames zip _)
-        for {
-          bs <- bindings
-          innerContext = c ++ bs
-          ret <- eval(body, innerContext)
-        } yield ret
+    case _ =>
+      eval(fn, ctxt).flatMap {
+        case fn: Val.Fun =>
+          for {
+            args <- args.traverseU(eval(_, ctxt))
+            v <- applyFun(fn, args, ctxt)
+          } yield v
+      }
 
-      case Val.Def(bodies, bodyContext) =>
-        args.traverseU(eval(_, ctxt)).flatMap { argValues =>
+  }
+
+  def applyFun(fn: Val.Fun, args: List[Val], ctxt: Context)(implicit global: Global): Eval[Val] = {
+    fn match {
+      case Val.Builtin(f) => Eval.now(f(args))
+      case Val.Lambda(argNames, body, c) =>
+        if(argNames.size > args.size) {
+          Eval.now(Val.Builtin { a => applyFun(fn, args ++ a, ctxt).value }) // TODO Should `Builtin#run`'s type be changed to List[Val] => Eval[Val] ?
+        } else {
+          val bindings = argNames zip args
+          val innerContext = c ++ bindings
+          eval(body, innerContext)
+        }
+      case d @ Val.Def(bodies, bodyContext) =>
+        if(d.numParams > args.size) {
+          Eval.now(Val.Builtin { a => applyFun(fn, args ++ a, ctxt).value })
+        } else {
           bodies.foldLeft(Eval.now(None: Option[Val])) { case (e, (patterns, body)) =>
             e.flatMap {
               case Some(_) => e
               case None =>
-                (patterns zip argValues).traverseU {
+                (patterns zip args).traverseU {
                   case (pat, v) => patmat(ctxt, v, pat)
                 }.flatMap { results =>
                   val binds = results.sequenceU.map(_.foldLeft(Map.empty[Val.Sym, Val])(_ ++ _))
@@ -158,7 +177,7 @@ object Interpreter {
                   }
                 }
             }
-          }.map(_.getOrElse(throw new AssertionError(s"Match error: Can't match $argValues to any of ${ bodies.map(_._1) }")))
+          }.map(_.getOrElse(throw new AssertionError(s"Match error: Can't match $args to any of ${ bodies.map(_._1) }")))
         }
     }
   }
