@@ -117,6 +117,11 @@ object Interpreter {
         case arg => eval(arg, ctxt).map(List(_))
       }.map(vs => Val.Sexp(vs.flatten))
 
+    case S.quote =>
+      args match {
+        case List(v) => Eval.now(v)
+      }
+
     case S.`if` =>
       val List(cond, t, f) = args
       eval(cond, ctxt) flatMap {
