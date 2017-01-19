@@ -39,6 +39,7 @@ object Val {
 
   case class Data(constructor: Val.Sym, members: Seq[Val]) extends Val
 
+  case class Native(value: Any) extends Val // Used to store objects in js environment, do not overuse
 
   def desugar(sval: SVal): Val = sval match {
     case SVal.Sexp(vals) => Sexp(vals map desugar)

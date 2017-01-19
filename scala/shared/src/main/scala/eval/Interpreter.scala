@@ -44,6 +44,10 @@ object Interpreter {
     val module = Val.Sym("default")
     val ctxt = Context.empty(module)
 
+    val imports: Seq[Val.Sym] = program.collect {
+      case Val.Sexp(S.`import` :: (name: Val.Sym) :: Nil) => name
+    }
+
     val dataDefs: Seq[(Val.Sym, Val)] = program.collect {
       case Val.Sexp(S.data :: Val.Sexp(_) :: cs) =>
         cs.map {
@@ -71,7 +75,7 @@ object Interpreter {
       case Val.Sexp(S.`def` :: _) => false
       case _ => true
     }
-    val moduleContext = new ModuleContext((defs ++ dataDefs).toMap, imports = Seq(Val.Sym("prelude")))
+    val moduleContext = new ModuleContext((defs ++ dataDefs).toMap, Val.Sym("prelude") +: imports)
     val newGlobal = new Global(global.moduleContexts + (module -> moduleContext))
     val constDefs: Seq[(Val.Sym, Val)] = program.foldLeft(ctxt) {
       case (ctxt, Val.Sexp(S.`def` :: (name: Val.Sym) :: value :: Nil)) =>
@@ -100,6 +104,9 @@ object Interpreter {
   }
 
   def prefix(ctxt: Context, fn: Val, args: List[Val])(implicit global: Global): Eval[Val] = fn match {
+    case S.symbol =>
+      val List(s: Val.Sym) = args
+      Eval.now(s)
     case S.`if` =>
       val List(cond, t, f) = args
       eval(cond, ctxt) flatMap {

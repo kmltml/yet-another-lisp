@@ -24,6 +24,10 @@ object ParserTest extends TestSuite {
         }
       }
 
+      "parse a quoted symbol" - {
+        assertSuccess(SVal.Quot("foo"), Parser.expression.parse("'foo"))
+      }
+
       "parse a symbol" - {
         "an alphanumeric symbol" - {
           assertMatch(Parser.expression.parse("foo")) {
