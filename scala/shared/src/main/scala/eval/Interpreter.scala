@@ -58,9 +58,7 @@ object Interpreter {
     }.flatten
 
     val defs: Seq[(Val.Sym, Val)] = program.collect {
-      case Val.Sexp(S.`def` :: (name: Val.Sym) :: value :: Nil) =>
-        name -> eval(value, ctxt)(global).value // No recursion taking place here, so it's fine to escape eval context
-      case Val.Sexp(S.`def` :: d) =>
+      case Val.Sexp(S.`def` :: d) if d.head.isInstanceOf[Val.Sexp] =>
         val pairs = d.grouped(2).toList
         val Val.Sexp((name: Val.Sym) :: _) :: _ = pairs.head
         val bodies = pairs map {
@@ -75,7 +73,13 @@ object Interpreter {
     }
     val moduleContext = new ModuleContext((defs ++ dataDefs).toMap, imports = Seq(Val.Sym("prelude")))
     val newGlobal = new Global(global.moduleContexts + (module -> moduleContext))
-    (newGlobal, lastExp.map(eval(_, ctxt)(newGlobal).value).getOrElse(S.nil))
+    val constDefs: Seq[(Val.Sym, Val)] = program.foldLeft(ctxt) {
+      case (ctxt, Val.Sexp(S.`def` :: (name: Val.Sym) :: value :: Nil)) =>
+        ctxt + (name -> eval(value, ctxt)(newGlobal).value) // No recursion taking place here, so it's fine to escape eval context)
+      case (ctxt, _) => ctxt
+    }.bindings.toSeq
+    val newerGlobal = new Global(global.moduleContexts + (module -> (moduleContext ++ constDefs)))
+    (newGlobal, lastExp.map(eval(_, ctxt)(newerGlobal).value).getOrElse(S.nil))
 
   }
 
@@ -89,7 +93,7 @@ object Interpreter {
         .map(global.moduleContexts(_).defs.get(s))
         .collectFirst {
           case Some(v) => v
-        }).get
+        }).getOrElse(throw new AssertionError(s"undefined symbol: $s"))
       Eval.now(x)
 
     case Val.Sexp(fn :: args) => prefix(ctxt, fn, args)
@@ -136,6 +140,14 @@ object Interpreter {
           case Some(v) => v
         }.getOrElse(throw new AssertionError("Match error!")))
       }
+
+    case S.`debug-print` =>
+      def debugPrint(v: Val): String = v match {
+        case Val.Sym(s) => s"'$s"
+        case Val.Num(n) => s"n($n)"
+        case Val.Sexp(s) => s.map(debugPrint).mkString("sexp(", ", ", ")")
+      }
+      Eval.now(Val.Str(args.map(debugPrint).mkString(", \n")))
 
     case _ =>
       eval(fn, ctxt).flatMap {

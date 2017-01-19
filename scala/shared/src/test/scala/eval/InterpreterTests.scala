@@ -146,6 +146,32 @@ object InterpreterTests extends TestSuite{
         sexp(sexp('add, n(1)), n(2))
       ))._2 ==> n(3)
     }
+    "sequential dependence of constant defs" - {
+      Interpreter.evalProgram(List(
+        sexp('def, 'x, n(1)),
+        sexp('def, 'y, sexp('+, 'x, n(10))),
+        'y
+      ))._2 ==> n(11)
+    }
+    "sequential dependence of constant and function defs" - {
+      Interpreter.evalProgram(List(
+        sexp('def, sexp('++, 'x), sexp('+, 'x, n(1))),
+        sexp('def, 'x, sexp('++, n(10))),
+        'x
+      ))._2 ==> n(11)
+    }
+    "point-free list sum" - {
+      Interpreter.evalProgram(List(
+        sexp('data, sexp('List, 'a),
+          sexp('::, 'a, sexp('List, 'a)),
+          sexp('Nil)),
+        sexp('def,
+          sexp('foldl, '_, 'i, 'Nil), 'i,
+          sexp('foldl, 'f, 'i, sexp('::, 'a, 'as)),
+            sexp('foldl, 'f, sexp('f, 'i, 'a), 'as)),
+        sexp('def, 'sum, sexp('foldl, '+, n(0))),
+        sexp('sum, sexp('::, n(1), sexp('::, n(2), sexp('::, n(3), sexp('::, n(4), 'Nil)))))))._2 ==> n(10)
+    }
   }
 
 }
